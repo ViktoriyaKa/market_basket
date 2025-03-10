@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>ORDERS SHOP</h1>
+    {% for order in orders %}
+    <p><a href="{% url 'edit_order' order.id %}">{{ order.title }}</a></p>
+    <p>{{ order.count }} x {{ order.price }} RUB</p>
+
+    <p>Status: {{ order.get_status_display }}</p>
+
+    <p>{{ order.time_created }}</p>
+<hr>
+    {% endfor %}
+
+<br><br><br><br><br>
+{% endblock %}

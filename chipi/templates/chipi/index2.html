@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+    {% for p in prod %}
+        {% if p.logo_image %}
+        <img src="{{ p.logo_image.url }}" width="100" height="100">
+        {% endif %}
+    {% if p.count == 0 %}
+        <p><b><s>{{ p.title }}</s></b></p>
+    {% else %}
+        <p><b>{{ p.title|upper }}</b></p>
+    {% endif %}
+
+        {% if p.mark %}
+        <p>☆{{ p.mark|floatformat:1 }}</p>
+        {% else %}
+        <p>☆ 0.0</p>
+        {% endif %}
+    <p>{{ p.price }}₽</p>
+    <a href="{{ p.get_absolute_url }}">click</a>
+    {% if user.is_buyer %}
+
+    <ul>{% if p.count_in_cart %}
+        <span style="display: none;" id="cart0-{{ p.id }}">
+            <a href="{% url 'cart_add_ajax' %}" class="add-to-cart" data-product-id="{{ p.id }}">
+                {% csrf_token %}
+            <button>Добавить в корзину&#128465</button>
+            </a>
+        </span>
+
+        <span id="cart1-{{ p.id }}">
+            <a href="{% url 'cart_decr_in_index_ajax' %}" class="cart-decr"
+               data-product-id="{{ p.id }}"><button>-</button>{% csrf_token %}</a>
+            <span id="prod-count-{{ p.id }}">{{ p.count_in_cart }}</span>
+            {% if p.count_in_cart == p.count %}
+                <a href="{% url 'cart_add_ajax' %}" class="cart-inc" id="prod_last-{{ p.id }}"
+                   data-product-id="{{ p.id }}"><button disabled="true">+</button>{% csrf_token %}</a>
+                <a style="display: none;" href="{% url 'cart_add_ajax' %}" class="cart-inc" id="prod_nolast-{{ p.id }}"
+                data-product-id="{{ p.id }}"><button>+</button>{% csrf_token %}</a>
+            {% else %}
+                <a href="{% url 'cart_add_ajax' %}" class="cart-inc" id="prod_nolast-{{ p.id }}"
+                   data-product-id="{{ p.id }}"><button>+</button>{% csrf_token %}</a>
+                <a style="display: none;" href="{% url 'cart_add_ajax' %}" class="cart-inc" id="prod_last-{{ p.id }}"
+                data-product-id="{{ p.id }}"><button disabled="true">+</button>{% csrf_token %}</a>
+            {% endif %}
+        </span>
+
+        {% else %}
+
+        <span id="cart0-{{ p.id }}">
+            <a href="{% url 'cart_add_ajax' %}" class="add-to-cart" data-product-id="{{ p.id }}">
+                {% csrf_token %}
+            <button>Добавить в корзину&#128465</button>
+            </a>
+        </span>
+
+        <span style="display: none;" id="cart1-{{ p.id }}">
+            <a href="{% url 'cart_decr_in_index_ajax' %}" class="cart-decr"
+               data-product-id="{{ p.id }}"><button>-</button>{% csrf_token %}</a>
+                <span id="prod-count-{{ p.id }}"> 1 </span>
+            <a href="{% url 'cart_add_ajax' %}" class="cart-inc"
+               data-product-id="{{ p.id }}" id="prod_nolast-{{ p.id }}"><button>+</button>{% csrf_token %}</a>
+            <a style="display: none;" href="{% url 'cart_add_ajax' %}" class="cart-inc" id="prod_last-{{ p.id }}"
+            data-product-id="{{ p.id }}"><button disabled="true">+</button>{% csrf_token %}</a>
+
+        </span>
+        {% endif %}
+
+        {% if p in fav_prod %}
+        <a style="color: red; text-decoration: none; font-size: 25px" href="{% url 'rem_fav' product_id=p.id %}">
+            ♥
+            </a>
+        {% else %}
+        <a style="color: black; text-decoration: none; font-size: 25px" href="{% url 'add_fav' product_id=p.id %}">
+            ♥
+            </a>
+        {% endif %}
+
+
+    </ul>
+
+    {% endif %}
+
+    <p>shop:<a href="{{ p.shop.get_absolute_url }}">{{ p.shop.name }}</a> </p>
+    {% if not forloop.last %}
+    <hr>
+    {% endif %}
+    {% endfor %}
+{% endblock %}

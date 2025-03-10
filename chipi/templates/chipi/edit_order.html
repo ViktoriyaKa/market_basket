@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+<h1>Edit Order</h1>
+{% block content %}
+    {% if order.product.logo_image %}
+        <img src="{{ order.product.logo_image.url }}" width="200" >
+    {% endif %}
+    <h1> {{ order.title }} {{ order.count }} x {{ order.price }} RUB</h1>
+    <form action="" method="post">
+        {% csrf_token %}
+        <div class="form-error">{{ form.non_field_errors }}</div>
+        {% for f in form %}
+            <p><label class="form-label" for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}</p>
+            <div class="form-error">{{ f.errors }}</div>
+        {% endfor %}
+        <p><button type="submit">SEND</button></p>
+    </form>
+    <p>{{ order.time_created }}</p>
+    <p>Product <a href="{% url 'product' order.product.id %}">{{ order.product.title }}</a></p>
+{% endblock %}

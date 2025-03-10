@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h3> SHOP - {{ shop.name }}</h3>
+
+    {% if user.shop.id == shop.id %}
+    <p><a href="{% url 'users:edit_shop' %}">Edit shop</a></p>
+    <p><a href="{% url 'addprod' %}">Add product</a></p>
+    {% endif %}
+    <br><hr>
+    {% for p in prod %}
+    <p><b>{{ p.title }}</b></p>
+    <p>{{ p.price }}₽</p>
+    <a href="{{ p.get_absolute_url }}">click</a>
+        {% if user.shop.id == shop.id %}
+        <p><a href="{% url 'edit_product' product_id=p.id %}">(edit)</a></p>
+        {% endif %}
+    {% if not forloop.last %}
+    <hr>
+    {% endif %}
+    {% endfor %}
+{% endblock %}

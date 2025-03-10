@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+    {% for p in prod %}
+    <p><b>{{ p.title }}</b></p>
+    <p>{{ p.price }}₽</p>
+    <a href="{{ p.get_absolute_url }}">click</a>
+
+    <p>shop:<a href="{{ p.shop.get_absolute_url }}">{{ p.shop.name }}</a> </p>
+    {% if not forloop.last %}
+    <hr>
+    {% endif %}
+    {% endfor %}
+{% endblock %}

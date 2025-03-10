@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>ORDERS</h1>
+    {% for order in orders %}
+    <p>{{ order.title }}</p>
+    <p>{{ order.count }} x {{ order.price }} RUB</p>
+<!--    {% if order.status == 0 %}-->
+<!--    <p>Status: оплачен</p>-->
+<!--    {% else %}-->
+<!--    <p>hui</p>-->
+<!--    <p>Status: {{ order.status }}</p>-->
+<!--    {% endif %}-->
+        <p>{{ order.get_status_display }}</p>
+<hr>
+    {% endfor %}
+
+<br><br><br><br><br>
+{% endblock %}

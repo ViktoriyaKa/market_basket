@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>Cart: {{ total_count }} -- {{ total_sum }}₽</h1>
+    {% for p in products %}
+
+    {% if p.count|add:0 == 1 %}
+        <p> {{ p.sum }}₽</p>
+        <p><b>{{ p.product.title }}</b></p>
+
+    {% else %}
+        <p> {{ p.sum }}₽</p>
+        <p><b>{{ p.count }} x {{ p.product.title }}</b></p>
+        <p style="color: grey">{{ p.product.price }}₽ / шт</p>
+    {% endif %}
+
+    <a href="{{ p.product.get_absolute_url }}">click</a>
+    <p>shop:<a href="{{ p.product.shop.get_absolute_url }}">{{ p.product.shop.name }}</a> </p>
+    <ul>
+        <a href="{% url 'cart_delete' cart_id=p.id %}"><button>del</button></a>
+            {% if p.count == 1 %}
+                <a href=""><button disabled="true">-</button></a>
+            {% else %}
+                <a href="{% url 'cart_decr' cart_id=p.id %}"><button>-</button></a>
+            {% endif %}
+        {{ p.count }}
+        <a href="{% url 'cart_add' product_id=p.product.id %}"><button>+</button></a>
+    </ul>
+
+    {% if not forloop.last %}
+    <hr>
+    {% endif %}
+    {% endfor %}
+    <hr>
+    <h2>Total amount: {{ total_sum }}₽</h2>
+    <a href="{% url 'create_order' %}"><button>Оформить заказ</button></a>
+<br><br><br><br><br>
+{% endblock %}

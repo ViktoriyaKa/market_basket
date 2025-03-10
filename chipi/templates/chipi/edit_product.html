@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+<h1>Edit Product</h1>
+{% block content %}
+    {% if product.logo_image %}
+    <p><img src="{{ product.logo_image.url }}" width="100" height="100"></p>
+    {% endif %}
+    <form action="" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-error">{{ form.non_field_errors }}</div>
+        {% for f in form %}
+            <p><label class="form-label" for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}</p>
+            <div class="form-error">{{ f.errors }}</div>
+        {% endfor %}
+        <p>
+            {% for ph in photos %}
+            <p><img src="{{ ph.image.url }}" width="100" height="100"></p>
+            {% endfor %}
+        </p>
+        <input type="file" name = "files" multiple accept="image/*" />
+        <p><button type="submit">SEND</button></p>
+    </form>
+{% endblock %}
