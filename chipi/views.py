@@ -15,38 +15,33 @@ from django.db.models import Avg, Count, Q, Sum, Min
 
 # Create your views here.
 
+def get_products(user, search_query=None):
+    filters = {}
+    if search_query:
+        filters['title__icontains'] = search_query
 
+    products = Product.objects.filter(**filters).annotate(
+        mark=Avg('reviews__score')
+    ).select_related('shop')
+
+    if user.is_authenticated and user.is_buyer:
+        products = products.annotate(
+            count_in_cart=Min('cart__count', filter=Q(cart__user=user.buyer))
+        )
+
+    return products
+
+@login_required
 def index(request):
-    search_query = request.GET.get('q')
+    search_query = request.GET.get('q', '')
+    products = get_products(request.user, search_query)
+    fav_prod = Product.objects.filter(favorite__user=request.user.buyer) if request.user.is_authenticated else []
 
-    # products = Product.objects.filter(is_published=1)
-    if request.user.is_authenticated and request.user.is_buyer:
-        carts = Cart.objects.filter(user=request.user.buyer).order_by('-time_created')
-        for cart in carts:
-            if cart.product.count == 0:
-                cart.delete()
-            elif cart.count > cart.product.count:
-                cart.count = cart.product.count
-                cart.save()
-
-        fav_prod = Product.objects.filter(favorite__user=request.user.buyer)
-        if search_query == None:
-            products = Product.objects.annotate(mark=Avg('reviews__score')).order_by('id').select_related('shop').annotate(
-                count_in_cart=Min('cart__count', filter=Q(cart__user=request.user.buyer)))
-        else:
-
-            products = Product.objects.filter(title__icontains=search_query).annotate(mark=Avg('reviews__score')).order_by('id').select_related(
-                'shop').annotate(
-                count_in_cart=Min('cart__count', filter=Q(cart__user=request.user.buyer)))
-
-
-    else:
-        fav_prod = []
-        products = Product.objects.annotate(mark=Avg('reviews__score')).order_by('id').select_related('shop')
-    # return render(request, 'chipi/index_with_score.html', context={"prod": products, "fav_prod": fav_prod})
-    return render(request, 'chipi/index2.html', context={"prod": products, "fav_prod": fav_prod,
-                                                         'search_text': search_query or ''})
-
+    return render(request, 'chipi/index2.html', {
+        "prod": products,
+        "fav_prod": fav_prod,
+        "search_text": search_query
+    })
 
 def catg(request, cat_id):
     return render(request, 'chipi/cats.html', context={'cat_id': cat_id, })
@@ -64,47 +59,32 @@ def show_product_old(request, product_id):
     return render(request, 'chipi/product.html', context=data)
 
 
+@login_required
 def show_product(request, product_id):
     product = get_object_or_404(Product, pk=product_id)
     photos = ProductImage.objects.filter(product=product)
-    reviews = Review.objects.filter(product_id=product_id)
-    if request.user.is_buyer:
-        corrent_r = Review.objects.filter(product=product, user=request.user.buyer)
-        prod_bought = Order.objects.filter(product=product, user=request.user.buyer, status=Order.Status.DELIVERED)
-        if len(prod_bought) == 0:
-            is_bought = False
-        else:
-            is_bought = True
-    else:
-        corrent_r = []
-        is_bought = False
-    user = request.user
+    reviews = Review.objects.filter(product=product)
+    user_bought = Order.objects.filter(product=product, user=request.user.buyer, status=Order.Status.DELIVERED).exists()
 
-    if request.method == 'POST':
+    if request.method == 'POST' and user_bought:
         form = ReviewForm(request.POST, request.FILES)
-        if is_bought and len(corrent_r) == 0:
-            if form.is_valid():
-                # print(form.cleaned_data)
-                try:
-                    prod = Review.objects.create(**form.cleaned_data, user=user.buyer, product=product)
-                    corrent_r = [prod]
-
-                    # return redirect('home')
-                except:
-                    form.add_error(None, 'Ошибка добавления хз')
-
+        if form.is_valid() and not Review.objects.filter(product=product, user=request.user.buyer).exists():
+            form.instance.user = request.user.buyer
+            form.instance.product = product
+            form.save()
     else:
         form = ReviewForm()
-    data = {
+
+    return render(request, 'chipi/product.html', {
         'title': product.title,
         'product': product,
         'photos': photos,
         'form': form,
         'reviews': reviews,
-        'is_bought': is_bought,
-        'rev_count': len(corrent_r),
-    }
-    return render(request, 'chipi/product.html', context=data)
+        'is_bought': user_bought,
+        'rev_count': reviews.count()
+    })
+
 
 def show_shop(request, seller_id):
     shop = get_object_or_404(Shop, pk=seller_id)
@@ -114,20 +94,16 @@ def show_shop(request, seller_id):
 # @login_required
 
 
-
-
+@login_required
 def cart_add(request, product_id):
-    product = Product.objects.get(id=product_id)
-    carts = Cart.objects.filter(user=request.user.buyer, product=product)
-    if not carts.exists():
-        Cart.objects.create(user=request.user.buyer, product=product, count=1)
-    else:
-        cart = carts.first()
-        if int(product.count) > int(cart.count):
-            cart.count += 1
-        cart.save()
-    return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+    product = get_object_or_404(Product, id=product_id)
+    cart, created = Cart.objects.get_or_create(user=request.user.buyer, product=product, defaults={'count': 1})
 
+    if not created and cart.count < product.count:
+        cart.count += 1
+        cart.save()
+
+    return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
 
 def cart_add_ajax(request):
     product_id = request.POST.get("product_id")
