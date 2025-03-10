@@ -1,0 +1,76 @@
+{% load static %}
+{% load get_cart %}
+{% load mptt_tags %}
+{% load chipi_tags %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CHIPI-CHIPI</title>
+    <link rel="stylesheet" href="{% static 'chipi/css/style.css' %}">
+</head>
+<body>
+    <div>
+    <h2><a href="{% url 'home' %}">CHIPI-CHIPI</a></h2>
+    {% if user.is_authenticated %}
+        {% if user.is_buyer %}
+        <p>Profile: <a href="{% url 'users:profile' %}">{{ user.username }}</a> | <a href="{% url 'users:logout' %}">logout</a></p>
+        {% elif user.is_shop %}
+        <p>Shop: <a href="{% url 'shop' seller_id=user.shop.id %}">{{ user.username }}</a> | <a href="{% url 'users:logout' %}">logout</a></p>
+        <p><a href="{% url 'addprod' %}">Add product</a></p>
+        {% endif %}
+    {% else %}
+        <p><a href="{% url 'users:login' %}">login</a> <a href="{% url 'users:register' %}">register</a></p>
+    {% endif %}
+
+        {% if user.is_buyer %}
+        {% get_cart filter=user.pk as cart %}
+            {% if cart|add:0 > 0 %}
+                 <a href="{% url 'cart' %}"><p>Cart: <span id="prod-cart-count">{{ cart }}</span></p></a>
+            {% else %}
+        <a href="{% url 'cart' %}"><p>Cart: <span id="prod-cart-count">0</span></p></a>
+            {% endif %}
+        {% else %}
+        <p>Cart: empty</p>
+        {% endif %}
+        <a href="{% url 'favorites' %}">Favorites</a>
+        {% if user.is_authenticated %}
+            {% if user.is_buyer %}
+                <a href="{% url 'orders' %}">Orders</a>
+            {% elif user.is_shop %}
+                <a href="{% url 'orders_shop' %}">Shop orders</a>
+            {% endif %}
+        {% endif %}
+        <form action="{% url 'search' %}" method="get">
+            <input class="search" type="text" name="q" placeholder="Search.." value="{{ search_text }}">
+        </form>
+
+
+
+
+        <p>{% get_category as ctg %}</p>
+        <ul class="root">
+<!--            {{ ctg }}-->
+    {% recursetree ctg %}
+        <li>
+            <a href="{% url 'category' category_slug=node.slug %}">{{ node.name }}</a>
+            {% if not node.is_leaf_node %}
+                <ul class="children">
+                    {{ children }}
+                </ul>
+            {% endif %}
+        </li>
+    {% endrecursetree %}
+</ul>
+
+
+
+    </div>
+    <hr><hr>
+    {% block content %} {% endblock %}
+
+    <script src="{% static 'chipi/js/jquery/jquery-3.7.1.min.js' %}"></script>
+    <script src="{% static 'chipi/js/jquery-ajax.js' %}"></script>
+</body>
+</html>
