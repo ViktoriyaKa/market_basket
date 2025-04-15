@@ -244,6 +244,7 @@ def cart_decr_in_index_ajax(request):
 #lab4
 
 def clean_cart(user):
+    """Удаляет пустые товары и корректирует количество в корзине."""
     carts = Cart.objects.filter(user=user).order_by("-time_created")
     new_cart = []
     
@@ -260,6 +261,7 @@ def clean_cart(user):
     return new_cart
 
 def calculate_cart_totals(carts):
+    """Вычисляет общую сумму и количество товаров."""
     total_count = sum(cart.count for cart in carts)
     total_sum = sum(cart.sum() for cart in carts)
     return total_count, total_sum
@@ -319,7 +321,6 @@ def create_order(request):
     )
 
 
-
 def pay_order(request):
     if not request.user.is_buyer:
         return HttpResponseNotFound("<h1>Оформление заказа недоступно в режиме магазина</h1>") if request.user.is_shop else redirect("users:login")
@@ -341,6 +342,7 @@ def pay_order(request):
                 form.add_error(None, "Количество доступных товаров изменилось")
                 return redirect("pay_order")
 
+        # Создание заказа и обновление товаров
         for cart in carts:
             cart.product.count -= cart.count
             cart.product.save()
@@ -477,20 +479,38 @@ def addprod(request):
         },
     )
 
+#lab4
+
+def clean_user_cart(user):
+    carts = Cart.objects.filter(user=user).order_by("-time_created")
+    for cart in carts:
+        if cart.product.count == 0:
+            cart.delete()
+        elif cart.count > cart.product.count:
+            cart.count = cart.product.count
+            cart.save()
+
+
+def get_favorite_products(user, category=None):
+    filters = {"favorite__user": user}
+    if category:
+        filters["prodcategory_id"] = category.pk
+    return Product.objects.filter(**filters)
+
+
+def parse_price(value, default):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
 
 def edit_product(request, product_id):
     product = get_object_or_404(Product, pk=product_id)
     photos = ProductImage.objects.filter(product=product)
 
-    # data = {
-    #     'title': product.title,
-    #     'product': product,
-    # }
-
     user = request.user
-    if not user.is_shop:
-        return HttpResponseNotFound("<h1>Страница не найдена</h1>")
-    if user.shop != product.shop:
+    if not user.is_shop or user.shop != product.shop:
         return HttpResponseNotFound("<h1>Страница не найдена</h1>")
 
     form = AddProdForm(instance=product)
@@ -499,193 +519,111 @@ def edit_product(request, product_id):
         form = AddProdForm(request.POST, request.FILES, instance=product)
         if form.is_valid():
             form.save()
-            files = request.FILES.getlist("files")
-            if len(files) > 0:
-                prim = ProductImage.objects.filter(product=product)
-                for pr in prim:
-                    if os.path.isfile(pr.image.path):
-                        os.remove(pr.image.path)
-                    pr.delete()
-            for f in files:
-                a = ProductImage(product=product, image=f)
-                a.save()
-            return redirect(
-                reverse_lazy("edit_product", kwargs={"product_id": product.id})
-            )
-    return render(
-        request,
-        "chipi/edit_product.html",
-        {"form": form, "product": product, "photos": photos},
-    )
+            uploaded_files = request.FILES.getlist("files")
+            if uploaded_files:
+                existing_images = ProductImage.objects.filter(product=product)
+                for img in existing_images:
+                    try:
+                        if os.path.isfile(img.image.path):
+                            os.remove(img.image.path)
+                    except Exception:
+                        pass
+                    img.delete()
+
+            for uploaded_file in uploaded_files:
+                image_instance = ProductImage(product=product, image=uploaded_file)
+                image_instance.save()
+
+            return redirect(reverse_lazy("edit_product", kwargs={"product_id": product.id}))
+
+    return render(request, "chipi/edit_product.html", {"form": form, "product": product, "photos": photos})
+
+
+def get_filtered_products(user=None, category=None, search_query="", min_price=0, max_price=10**9):
+    filters = {"title__icontains": search_query, "price__gte": min_price, "price__lte": max_price}
+    if category:
+        filters["prodcategory__in"] = category.get_descendants(include_self=True)
+
+    queryset = Product.objects.filter(**filters).annotate(mark=Avg("reviews__score")).order_by("id").select_related("shop")
+
+    if user:
+        queryset = queryset.annotate(
+            count_in_cart=Min("cart__count", filter=Q(cart__user=user))
+        )
+    return queryset
 
 
 def search(request):
-    search_query = request.GET.get("q")
-    min_pr = request.GET.get("min_price")
-    max_pr = request.GET.get("max_price")
-    ctgs = ProdCategory.objects.filter(parent=None)
-    # products = Product.objects.filter(is_published=1)
-    if request.user.is_authenticated and request.user.is_buyer:
-        carts = Cart.objects.filter(user=request.user.buyer).order_by("-time_created")
-        for cart in carts:
-            if cart.product.count == 0:
-                cart.delete()
-            elif cart.count > cart.product.count:
-                cart.count = cart.product.count
-                cart.save()
+    user = request.user
+    search_query = request.GET.get("q") or ""
+    min_pr = parse_price(request.GET.get("min_price"), 0)
+    max_pr = parse_price(request.GET.get("max_price"), 10**9)
+    categories = ProdCategory.objects.filter(parent=None)
 
-        fav_prod = Product.objects.filter(favorite__user=request.user.buyer)
-        if search_query == None:
-            products = (
-                Product.objects.annotate(mark=Avg("reviews__score"))
-                .order_by("id")
-                .select_related("shop")
-                .annotate(
-                    count_in_cart=Min(
-                        "cart__count", filter=Q(cart__user=request.user.buyer)
-                    )
-                )
-            )
-        else:
-            products = (
-                Product.objects.filter(
-                    title__icontains=search_query,
-                    price__gte=min_pr or 0,
-                    price__lte=max_pr or 10**9,
-                )
-                .annotate(mark=Avg("reviews__score"))
-                .order_by("id")
-                .select_related("shop")
-                .annotate(
-                    count_in_cart=Min(
-                        "cart__count", filter=Q(cart__user=request.user.buyer)
-                    )
-                )
-            )
-
+    if user.is_authenticated and user.is_buyer:
+        clean_user_cart(user.buyer)
+        fav_prod = get_favorite_products(user.buyer)
+        products = get_filtered_products(user=user.buyer, search_query=search_query, min_price=min_pr, max_price=max_pr)
     else:
         fav_prod = []
-        if search_query == None:
-            products = (
-                Product.objects.annotate(mark=Avg("reviews__score"))
-                .order_by("id")
-                .select_related("shop")
-            )
-        else:
-            products = (
-                Product.objects.filter(
-                    title__icontains=search_query,
-                    price__gte=min_pr or 0,
-                    price__lte=max_pr or 10**9,
-                )
-                .annotate(mark=Avg("reviews__score"))
-                .order_by("id")
-                .select_related("shop")
-            )
-    datacon = {
+        products = get_filtered_products(search_query=search_query, min_price=min_pr, max_price=max_pr)
+
+    context = {
         "prod": products,
         "fav_prod": fav_prod,
-        "search_text": search_query or "",
-        "min_pr": min_pr or "",
-        "max_pr": max_pr or "",
-        "ctgs": ctgs,
+        "search_text": search_query,
+        "min_pr": request.GET.get("min_price") or "",
+        "max_pr": request.GET.get("max_price") or "",
+        "ctgs": categories,
     }
-    # return render(request, 'chipi/index_with_score.html', context={"prod": products, "fav_prod": fav_prod})
-    return render(request, "chipi/search.html", context=datacon)
+    return render(request, "chipi/search.html", context=context)
 
 
 def show_category(request, category_slug):
     category = get_object_or_404(ProdCategory, slug=category_slug)
-    ctg = category
-    children_categories = ctg.get_descendants(include_self=True)
-    path = [
-        ctg,
-    ]
-    search_query = request.GET.get("q")
-    min_pr = request.GET.get("min_price")
-    max_pr = request.GET.get("max_price")
+    current_category = category
+    children_categories = current_category.get_descendants(include_self=True)
+    path = []
+    while current_category:
+        path.insert(0, current_category)
+        current_category = current_category.parent
+
+    search_query = request.GET.get("q") or ""
+    min_pr = parse_price(request.GET.get("min_price"), 0)
+    max_pr = parse_price(request.GET.get("max_price"), 10**9)
     next_ctgs = ProdCategory.objects.filter(parent=category)
-    while ctg.parent:
-        ctg = ctg.parent
-        path = [
-            ctg,
-        ] + path
 
     if request.user.is_authenticated and request.user.is_buyer:
-        carts = Cart.objects.filter(user=request.user.buyer).order_by("-time_created")
-        for cart in carts:
-            if cart.product.count == 0:
-                cart.delete()
-            elif cart.count > cart.product.count:
-                cart.count = cart.product.count
-                cart.save()
-
-        fav_prod = Product.objects.filter(
-            favorite__user=request.user.buyer, prodcategory_id=category.pk
+        clean_user_cart(request.user.buyer)
+        fav_prod = get_favorite_products(request.user.buyer, category)
+        products = get_filtered_products(
+            user=request.user.buyer,
+            category=category,
+            search_query=search_query,
+            min_price=min_pr,
+            max_price=max_pr
         )
-        if search_query == None:
-            products = (
-                Product.objects.filter(prodcategory__in=children_categories)
-                .annotate(
-                    mark=Avg("reviews__score"),
-                    count_in_cart=Min(
-                        "cart__count", filter=Q(cart__user=request.user.buyer)
-                    ),
-                )
-                .order_by("id")
-                .select_related("shop")
-            )
-        else:
-            products = (
-                Product.objects.filter(
-                    prodcategory__in=children_categories,
-                    title__icontains=search_query,
-                    price__gte=min_pr or 0,
-                    price__lte=max_pr or 10**9,
-                )
-                .annotate(
-                    mark=Avg("reviews__score"),
-                    count_in_cart=Min(
-                        "cart__count", filter=Q(cart__user=request.user.buyer)
-                    ),
-                )
-                .order_by("id")
-                .select_related("shop")
-            )
     else:
         fav_prod = []
-        if search_query == None:
-            products = (
-                Product.objects.filter(prodcategory__in=children_categories)
-                .annotate(mark=Avg("reviews__score"))
-                .order_by("id")
-                .select_related("shop")
-            )
-        else:
-            products = (
-                Product.objects.filter(
-                    prodcategory__in=children_categories,
-                    title__icontains=search_query,
-                    price__gte=min_pr or 0,
-                    price__lte=max_pr or 10**9,
-                )
-                .annotate(mark=Avg("reviews__score"))
-                .order_by("id")
-                .select_related("shop")
-            )
+        products = get_filtered_products(
+            category=category,
+            search_query=search_query,
+            min_price=min_pr,
+            max_price=max_pr
+        )
 
-    # return render(request, 'chipi/index_with_score.html', context={"prod": products, "fav_prod": fav_prod})
-    datacon = {
-        "search_text": search_query or "",
-        "min_pr": min_pr or "",
-        "max_pr": max_pr or "",
+    context = {
+        "search_text": search_query,
+        "min_pr": request.GET.get("min_price") or "",
+        "max_pr": request.GET.get("max_price") or "",
         "ctgs": next_ctgs,
         "prod": products,
         "fav_prod": fav_prod,
         "path": path,
     }
-    return render(request, "chipi/cats.html", context=datacon)
+    return render(request, "chipi/cats.html", context=context)
 
+#end4
 
 def rem_review(request, rev_id):
     user = request.user.buyer
